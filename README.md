@@ -20,6 +20,21 @@ Developer fills a form in Backstage
 
 ---
 
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Architecture Overview](docs/architecture.md) | Architectural layers, design decisions, infrastructure layout |
+| [Control Plane Design](docs/control-plane.md) | Platform API deep-dive: Operator pattern, CRDs, GitHub App auth |
+| [Developer Workflow](docs/developer-workflow.md) | End-to-end journey from service creation to production deploy |
+| [Platform Components](docs/platform-components.md) | Each component: role, design rationale, integration points |
+| [Architecture Principles](ARCHITECTURE.md) | Design principles + ADR index |
+| [ADR 001 — Control Plane](docs/adr/001-control-plane-architecture.md) | Why Kubernetes Operator over plain REST API |
+| [ADR 002 — GitOps / ArgoCD](docs/adr/002-gitops-with-argocd.md) | Why ArgoCD with ApplicationSets |
+| [ADR 003 — Crossplane](docs/adr/003-infrastructure-with-crossplane.md) | Why Crossplane over Terraform for runtime infra |
+
+---
+
 ## Architecture — Golden Triangle + Platform API
 
 ```mermaid
@@ -321,6 +336,14 @@ Destroys in correct order: Crossplane Claims → ArgoCD Apps → Platform → Ne
 - **Platform Engineering on Kubernetes** — Mauricio Salatino (Manning)
 - **Kubernetes Patterns** — Bilgin Ibryam & Roland Huß (O'Reilly)
 - **Platform Engineering with Go** — Nels Lutiy (O'Reilly)
+
+---
+
+## Status
+
+🚧 Active reference implementation — currently under local validation, hands-on testing and architectural study.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for design principles and [docs/adr/](docs/adr/) for key architectural decisions.
 
 ---
 
