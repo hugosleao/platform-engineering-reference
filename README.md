@@ -341,7 +341,7 @@ Destroys in correct order: Crossplane Claims → ArgoCD Apps → Platform → Ne
 
 ## Status
 
-🚧 Active lab — evolving platform engineering architecture aligned with production patterns and ongoing study.
+🚧 Active reference implementation — currently under local validation, hands-on testing and architectural study.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for design principles and [docs/adr/](docs/adr/) for key architectural decisions.
 
