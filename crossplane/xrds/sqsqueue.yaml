@@ -1,0 +1,35 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xsqsqueues.platform.devopstia.com
+spec:
+  group: platform.devopstia.com
+  names:
+    kind: XSQSQueue
+    plural: xsqsqueues
+  claimNames:
+    kind: SQSQueue
+    plural: sqsqueues
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                parameters:
+                  type: object
+                  properties:
+                    fifo:
+                      type: boolean
+                      default: false
+                    visibilityTimeout:
+                      type: integer
+                      default: 30
+                    messageRetentionDays:
+                      type: integer
+                      default: 4

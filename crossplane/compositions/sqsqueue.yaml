@@ -1,0 +1,41 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: sqsqueue-aws
+  labels:
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: platform.devopstia.com/v1alpha1
+    kind: XSQSQueue
+  mode: Pipeline
+  pipeline:
+    - step: sqs
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: sqs-queue
+            base:
+              apiVersion: sqs.aws.upbound.io/v1beta1
+              kind: Queue
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  region: us-east-1
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.fifo
+                toFieldPath: spec.forProvider.fifoQueue
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.visibilityTimeout
+                toFieldPath: spec.forProvider.visibilityTimeoutSeconds
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.messageRetentionDays
+                toFieldPath: spec.forProvider.messageRetentionSeconds
+                transforms:
+                  - type: math
+                    math:
+                      multiply: 86400

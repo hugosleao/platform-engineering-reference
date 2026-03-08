@@ -1,0 +1,50 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: s3bucket-aws
+  labels:
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: platform.devopstia.com/v1alpha1
+    kind: XS3Bucket
+  mode: Pipeline
+  pipeline:
+    - step: s3
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: s3-bucket
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: Bucket
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  region: us-east-1
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+          - name: s3-versioning
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketVersioning
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  region: us-east-1
+                  versioningConfiguration:
+                    - status: Suspended
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.versioning
+                toFieldPath: spec.forProvider.versioningConfiguration[0].status
+                transforms:
+                  - type: convert
+                    convert:
+                      toType: string
+                      format: none

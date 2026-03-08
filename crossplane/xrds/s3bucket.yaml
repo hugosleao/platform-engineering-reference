@@ -1,0 +1,36 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xs3buckets.platform.devopstia.com
+spec:
+  group: platform.devopstia.com
+  names:
+    kind: XS3Bucket
+    plural: xs3buckets
+  claimNames:
+    kind: S3Bucket
+    plural: s3buckets
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                parameters:
+                  type: object
+                  required: [region]
+                  properties:
+                    region:
+                      type: string
+                      default: us-east-1
+                    versioning:
+                      type: boolean
+                      default: false
+                    lifecycleDays:
+                      type: integer
+                      default: 90

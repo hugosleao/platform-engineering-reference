@@ -1,0 +1,86 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: platformservices.platform.devopstia.com
+  labels:
+    platform.devopstia.com/managed-by: platform-operator
+spec:
+  group: platform.devopstia.com
+  names:
+    kind: PlatformService
+    listKind: PlatformServiceList
+    plural: platformservices
+    singular: platformservice
+    shortNames:
+      - ps
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Team
+          type: string
+          jsonPath: .spec.team
+        - name: RepoURL
+          type: string
+          jsonPath: .status.repoURL
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [team, runtime, sigla]
+              properties:
+                team:
+                  type: string
+                runtime:
+                  type: string
+                  enum: [java, python, nodejs, golang]
+                sigla:
+                  type: string
+                environment:
+                  type: string
+                  enum: [dev, hml, prd]
+                infraResources:
+                  type: array
+                  items:
+                    type: object
+                    required: [kind, name]
+                    properties:
+                      kind:
+                        type: string
+                        enum: [S3Bucket, RDSInstance, SQSQueue]
+                      name:
+                        type: string
+                      spec:
+                        type: object
+                        additionalProperties:
+                          type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                repoURL:
+                  type: string
+                argoCDApp:
+                  type: string
+                provisionedResources:
+                  type: array
+                  items:
+                    type: string
+                message:
+                  type: string
+                lastReconciled:
+                  type: string
+                  format: date-time

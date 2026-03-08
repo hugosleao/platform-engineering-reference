@@ -1,0 +1,21 @@
+# ============================================================
+# vision-2026 — terraform.tfvars.example
+# Copie para terraform.tfvars e preencha os valores
+# ============================================================
+
+# AWS
+aws_region   = "us-east-1"
+environment  = "lab"
+owner        = "hugosleao"
+project_name = "golden-triangle-lab"
+
+# EKS
+cluster_name    = "eks-lab"
+cluster_version = "1.31"
+
+# DNS
+domain_name = "devopstia.com"
+
+# GitHub (via AWS Secrets Manager)
+# Crie o secret antes com: ./scripts/setup-secrets.sh
+github_secrets_manager_secret_id = "platform/github-credentials"

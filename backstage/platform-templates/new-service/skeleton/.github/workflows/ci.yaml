@@ -1,0 +1,36 @@
+name: CI — Build & Test
+
+# Roda em QUALQUER branch
+# Nunca faz deploy — só valida o código
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - develop
+      - master
+      - "release/**"
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build & Test
+        run: mvn --batch-mode clean verify
+
+      - name: SonarQube Analysis
+        run: mvn sonar:sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

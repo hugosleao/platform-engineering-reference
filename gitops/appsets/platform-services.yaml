@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-services
+  namespace: argocd
+  annotations:
+    platform.devopstia.com/gitflow: |
+      develop   → clusters/dev/services/*
+      release/* → clusters/hml/services/*
+      master    → clusters/prd/services/*
+      feature/* → CI only, sem deploy
+      fix/*     → CI only, sem deploy
+spec:
+  generators:
+    # DEV — assiste branch develop
+    - git:
+        repoURL: https://github.com/GITHUB_ORG/gitops-repo
+        revision: develop
+        directories:
+          - path: clusters/dev/services/*
+
+    # HML — assiste qualquer branch release/*
+    # O workflow CI atualiza o gitops-repo na branch correta
+    - git:
+        repoURL: https://github.com/GITHUB_ORG/gitops-repo
+        revision: HEAD
+        directories:
+          - path: clusters/hml/services/*
+
+    # PRD — assiste branch master
+    - git:
+        repoURL: https://github.com/GITHUB_ORG/gitops-repo
+        revision: master
+        directories:
+          - path: clusters/prd/services/*
+
+  template:
+    metadata:
+      name: "{{path.basename}}"
+      namespace: argocd
+      labels:
+        platform.devopstia.com/managed-by: platform-operator
+        platform.devopstia.com/env: "{{path[1]}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/GITHUB_ORG/gitops-repo
+        targetRevision: HEAD
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{path.basename}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

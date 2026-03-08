@@ -1,0 +1,111 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: python-api-template
+  title: Python App Template
+  description: Template corporativo para aplicações Python com FastAPI, Docker e TechDocs
+  tags:
+    - python
+    - fastapi
+    - api
+    - recommended
+spec:
+  owner: platform-team
+  type: service
+
+  parameters:
+    - title: Informações da API
+      required:
+        - sigla
+        - tipo
+        - appName
+        - description
+        - owner
+      properties:
+        sigla:
+          title: Sigla do Projeto
+          type: string
+          description: Sigla corporativa (ex. xpto, casd)
+          pattern: '^[a-z]{2,6}$'
+          ui:autofocus: true
+        tipo:
+          title: Tipo de Serviço
+          type: string
+          description: Tipo do serviço Python
+          enum:
+            - app
+            - qa
+          enumNames:
+            - 'Aplicação (app)'
+            - 'Aplicação de Teste (qa)'
+          default: app
+        appName:
+          title: Nome da Aplicação
+          type: string
+          description: Nome da aplicação (ex. lambda-handler, order-service)
+          pattern: '^[a-z][a-z0-9-]*(?<!-dev)(?<!-hml)(?<!-prd)$'
+        description:
+          title: Descrição
+          type: string
+          description: Breve descrição da API
+        owner:
+          title: Owner
+          type: string
+          description: Username ou organização GitHub
+          default: hugosleao
+        system:
+          title: System
+          type: string
+          description: Sistema ao qual pertence (opcional)
+          default: platform
+
+  steps:
+    - id: fetch
+      name: Fetch Template
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{parameters.sigla}}_${{parameters.tipo}}_${{parameters.appName}}
+          sigla: ${{parameters.sigla}}
+          tipo: ${{parameters.tipo}}
+          appName: ${{parameters.appName}}
+          description: ${{parameters.description}}
+          owner: ${{parameters.owner}}
+          system: ${{parameters.system}}
+
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        description: ${{parameters.description}}
+        repoUrl: github.com?owner=${{parameters.owner}}&repo=${{parameters.sigla}}_${{parameters.tipo}}_${{parameters.appName}}
+        defaultBranch: main
+        repoVisibility: public
+
+    - id: register
+      name: Register in Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{steps.publish.output.repoContentsUrl}}
+        catalogInfoPath: '/catalog-info.yaml'
+
+    - id: create-secrets
+      name: Create JIRA Secrets
+      action: github:actions:secrets
+      input:
+        repoUrl: github.com?owner=${{parameters.owner}}&repo=${{parameters.sigla}}_${{parameters.tipo}}_${{parameters.appName}}
+        token: ${{ secrets.GITHUB_PAT }}
+        secrets:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+          TOKEN_SVC_ACTIONS: ${{ secrets.GITHUB_TOKEN }}
+
+  output:
+    links:
+      - title: Repository
+        url: ${{steps.publish.output.remoteUrl}}
+      - title: Open in Catalog
+        icon: catalog
+        entityRef: ${{steps.register.output.entityRef}}

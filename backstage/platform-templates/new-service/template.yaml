@@ -1,0 +1,119 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: new-service
+  title: Novo Serviço (via Platform Broker)
+  description: Cria repositório, configura pipeline, registra no ArgoCD e provisiona infra opcionalmente.
+  tags:
+    - platform
+    - golang
+    - java
+    - nodejs
+spec:
+  owner: platform-team
+  type: service
+
+  parameters:
+    - title: Informações do Serviço
+      required: [name, description, team]
+      properties:
+        name:
+          title: Nome
+          type: string
+          description: Nome do serviço (ex. payment-service)
+          pattern: "^[a-z][a-z0-9-]{2,50}$"
+        description:
+          title: Descrição
+          type: string
+        team:
+          title: Time (slug GitHub)
+          type: string
+          description: Slug do time no GitHub (ex. squad-payments)
+        private:
+          title: Repositório privado?
+          type: boolean
+          default: true
+
+    - title: Infraestrutura (opcional)
+      properties:
+        withDatabase:
+          title: Provisionar banco de dados (RDS PostgreSQL)?
+          type: boolean
+          default: false
+        withQueue:
+          title: Provisionar fila (SQS)?
+          type: boolean
+          default: false
+
+  steps:
+    - id: create-service
+      name: Criar Serviço via Platform Broker
+      action: http:backstage:request
+      input:
+        method: POST
+        path: /api/proxy/platform-broker/v1/github/repos
+        body:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          team: ${{ parameters.team }}
+          private: ${{ parameters.private }}
+
+    - id: register-argocd
+      name: Registrar no ArgoCD
+      action: http:backstage:request
+      input:
+        method: POST
+        path: /api/proxy/platform-broker/v1/argocd/apps
+        body:
+          name: ${{ parameters.name }}
+          repo_url: ${{ steps['create-service'].output.body.clone_url }}
+          path: k8s
+          namespace: ${{ parameters.name }}
+
+    - id: provision-rds
+      if: ${{ parameters.withDatabase }}
+      name: Provisionar RDS via Crossplane
+      action: http:backstage:request
+      input:
+        method: POST
+        path: /api/proxy/platform-broker/v1/crossplane/claims
+        body:
+          name: ${{ parameters.name }}-db
+          namespace: ${{ parameters.name }}
+          kind: RDSInstance
+          spec:
+            engine: postgres
+            size: small
+
+    - id: provision-sqs
+      if: ${{ parameters.withQueue }}
+      name: Provisionar SQS via Crossplane
+      action: http:backstage:request
+      input:
+        method: POST
+        path: /api/proxy/platform-broker/v1/crossplane/claims
+        body:
+          name: ${{ parameters.name }}-queue
+          namespace: ${{ parameters.name }}
+          kind: SQSQueue
+          spec:
+            visibilityTimeout: 30
+
+    - id: register-catalog
+      name: Registrar no Catálogo
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['create-service'].output.body.html_url }}
+        catalogInfoPath: /catalog-info.yaml
+
+  output:
+    links:
+      - title: Repositório GitHub
+        url: ${{ steps['create-service'].output.body.html_url }}
+      - title: Ver no ArgoCD
+        url: ${{ steps['register-argocd'].output.body.name }}
+    text:
+      - title: Serviço criado
+        content: |
+          Repositório: `${{ steps['create-service'].output.body.full_name }}`
+          Pipeline configurado e ArgoCD registrado.

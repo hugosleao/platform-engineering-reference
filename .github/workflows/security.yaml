@@ -1,0 +1,47 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [master, develop, "release/**"]
+
+jobs:
+  secret-scan:
+    name: Secret Detection (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  dependency-scan:
+    name: Dependency Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Go vulnerability check
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: "1.22"
+          go-package: "./vision-2026/platform-api/..."
+        continue-on-error: true
+
+  terraform-security:
+    name: Terraform Security (tfsec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: vision-2026/infra
+          soft_fail: true

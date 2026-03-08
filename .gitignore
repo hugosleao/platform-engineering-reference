@@ -1,0 +1,70 @@
+# ============================================================
+# vision-2026 — .gitignore
+# ============================================================
+
+# ── Secrets e credenciais — NUNCA commitar ────────────────────
+.env
+.env.*
+!.env.*.example
+!.env.secrets.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+platform-api/github-app.pem
+
+# ── Terraform — gerados em runtime ───────────────────────────
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfvars
+!**/terraform.tfvars.example
+**/terraform.tfvars.json
+**/.terraformrc
+**/crash.log
+**/override.tf
+**/override.tf.json
+
+# ── Scripts de deploy — gerados em runtime ───────────────────
+.deploy-checkpoint
+deploy-*.log
+destroy-*.log
+.env.platform
+
+# ── Node.js / Backstage ───────────────────────────────────────
+node_modules/
+.yarn/releases/
+.yarn/cache/
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/cache
+dist/
+build/
+*.tsbuildinfo
+
+# ── Go ────────────────────────────────────────────────────────
+vendor/
+*.exe
+*.test
+*.out
+
+# ── macOS ─────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDEs ──────────────────────────────────────────────────────
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# ── Misc ──────────────────────────────────────────────────────
+*.bak
+*.tmp

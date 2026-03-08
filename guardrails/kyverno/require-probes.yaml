@@ -1,0 +1,30 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes
+spec:
+  validationFailureAction: Audit
+  rules:
+    - name: check-probes
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              namespaceSelector:
+                matchExpressions:
+                  - key: kubernetes.io/metadata.name
+                    operator: NotIn
+                    values: [kube-system, argocd, crossplane-system, cert-manager, kyverno]
+      validate:
+        message: "Deployments de app devem ter livenessProbe e readinessProbe"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - livenessProbe:
+                      httpGet:
+                        path: "?*"
+                    readinessProbe:
+                      httpGet:
+                        path: "?*"

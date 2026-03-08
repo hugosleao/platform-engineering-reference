@@ -1,0 +1,68 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: infrarequests.platform.devopstia.com
+  labels:
+    platform.devopstia.com/managed-by: platform-operator
+spec:
+  group: platform.devopstia.com
+  names:
+    kind: InfraRequest
+    listKind: InfraRequestList
+    plural: infrarequests
+    singular: infrarequest
+    shortNames:
+      - ir
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Kind
+          type: string
+          jsonPath: .spec.kind
+        - name: Sigla
+          type: string
+          jsonPath: .spec.sigla
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [sigla, kind, resourceName]
+              properties:
+                sigla:
+                  type: string
+                kind:
+                  type: string
+                  enum: [S3Bucket, RDSInstance, SQSQueue]
+                resourceName:
+                  type: string
+                parameters:
+                  type: object
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                repoURL:
+                  type: string
+                gitPath:
+                  type: string
+                message:
+                  type: string
+                lastReconciled:
+                  type: string
+                  format: date-time

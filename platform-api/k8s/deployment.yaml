@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-operator
+  namespace: platform
+  annotations:
+    # EKS Pod Identity — sem credencial estática
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/platform-operator-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-operator
+rules:
+  - apiGroups: [platform.devopstia.com]
+    resources: [platformservices, platformservices/status, infrarequests, infrarequests/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-operator
+subjects:
+  - kind: ServiceAccount
+    name: platform-operator
+    namespace: platform
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-app-secret
+  namespace: platform
+type: Opaque
+stringData:
+  # Preencha com os valores reais após criar o GitHub App
+  # ou use External Secrets Operator apontando para AWS Secrets Manager
+  GITHUB_APP_ID: "YOUR_APP_ID"
+  GITHUB_INSTALLATION_ID: "YOUR_INSTALLATION_ID"
+  GITHUB_ORG: "hugosleao"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-operator
+  namespace: platform
+  labels:
+    app: platform-operator
+    platform.devopstia.com/component: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platform-operator
+  template:
+    metadata:
+      labels:
+        app: platform-operator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: platform-operator
+      containers:
+        - name: operator
+          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/platform-operator:latest
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8081
+              name: healthz
+          env:
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secret
+                  key: GITHUB_APP_ID
+            - name: GITHUB_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secret
+                  key: GITHUB_INSTALLATION_ID
+            - name: GITHUB_ORG
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secret
+                  key: GITHUB_ORG
+            - name: GITHUB_APP_PRIVATE_KEY_PATH
+              value: /secrets/github-app.pem
+            - name: PLATFORM_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-api-token
+                  key: token
+            - name: GITOPS_REPO
+              value: "gitops-repo"
+            - name: PORT
+              value: "8080"
+          volumeMounts:
+            - name: github-pem
+              mountPath: /secrets
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: github-pem
+          secret:
+            secretName: github-app-pem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-operator
+  namespace: platform
+  labels:
+    app: platform-operator
+spec:
+  selector:
+    app: platform-operator
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-operator
+  namespace: platform
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - platform-api.devopstia.com
+      secretName: platform-api-tls
+  rules:
+    - host: platform-api.devopstia.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: platform-operator
+                port:
+                  number: 80

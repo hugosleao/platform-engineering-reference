@@ -1,0 +1,46 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: rdsinstance-aws
+  labels:
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: platform.devopstia.com/v1alpha1
+    kind: XRDSInstance
+  mode: Pipeline
+  pipeline:
+    - step: rds
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: rds-instance
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: Instance
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  region: us-east-1
+                  skipFinalSnapshot: true
+                  applyImmediately: true
+                  publiclyAccessible: false
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.engine
+                toFieldPath: spec.forProvider.engine
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.engineVersion
+                toFieldPath: spec.forProvider.engineVersion
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.instanceClass
+                toFieldPath: spec.forProvider.instanceClass
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.storageGB
+                toFieldPath: spec.forProvider.allocatedStorage
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.dbName
+                toFieldPath: spec.forProvider.dbName

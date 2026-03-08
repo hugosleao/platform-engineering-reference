@@ -1,0 +1,20 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: check-required-labels
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet]
+      validate:
+        message: "Labels obrigatórios: app, owner, team"
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              owner: "?*"
+              team: "?*"

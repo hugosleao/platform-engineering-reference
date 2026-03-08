@@ -1,0 +1,1 @@
+from .configuracao import token_infos, app_infos

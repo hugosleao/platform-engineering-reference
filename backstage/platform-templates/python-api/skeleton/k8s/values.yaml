@@ -1,0 +1,31 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/${{values.owner}}/${{values.name}}
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+env:
+  - name: ENVIRONMENT
+    value: "production"

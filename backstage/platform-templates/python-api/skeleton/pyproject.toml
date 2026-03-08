@@ -1,0 +1,29 @@
+[project]
+name = "casd-python-api-template"
+version = "2.0.2"
+description = "Template Python API - Cielo CASD"
+requires-python = ">=3.11,<3.14"
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/cielo-sa/casd_template-app_python-api"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=src --cov-report=term-missing --cov-report=html"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/test/*", "*/venv/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

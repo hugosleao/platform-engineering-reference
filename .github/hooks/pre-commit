@@ -1,0 +1,66 @@
+#!/bin/bash
+# pre-commit hook — bloqueia commit com secrets detectados
+# Instalação: ./scripts/setup-hooks.sh
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+
+echo -e "${YELLOW}[pre-commit] Verificando secrets...${NC}"
+
+# ── 1. gitleaks (melhor detector de secrets) ─────────────────
+if command -v gitleaks &>/dev/null; then
+  if ! gitleaks protect --staged --redact --no-banner 2>/dev/null; then
+    echo -e "${RED}❌ gitleaks detectou secrets no staged area!${NC}"
+    echo -e "${YELLOW}   Execute: gitleaks protect --staged --verbose para detalhes${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}✅ gitleaks: nenhum secret detectado${NC}"
+else
+  echo -e "${YELLOW}⚠️  gitleaks não instalado — usando verificação básica${NC}"
+  echo -e "${YELLOW}   Instale: brew install gitleaks${NC}"
+fi
+
+# ── 2. Verificação manual de padrões críticos ─────────────────
+STAGED=$(git diff --cached --name-only 2>/dev/null)
+
+FAIL=0
+for file in $STAGED; do
+  # Pula arquivos de exemplo
+  [[ "$file" == *.example ]] && continue
+  [[ "$file" == */node_modules/* ]] && continue
+
+  # Detecta padrões de secrets reais
+  if git show ":$file" 2>/dev/null | grep -qE \
+    'ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY'; then
+    echo -e "${RED}❌ Possível secret em: $file${NC}"
+    FAIL=1
+  fi
+
+  # Bloqueia .env sem ser .example
+  if [[ "$file" == *".env" ]] && [[ "$file" != *".env.example" ]] && \
+     [[ "$file" != *".env.*.example" ]]; then
+    echo -e "${RED}❌ Arquivo .env detectado: $file — não commitar!${NC}"
+    FAIL=1
+  fi
+
+  # Bloqueia terraform.tfvars (contém valores reais)
+  if [[ "$file" == *"terraform.tfvars" ]] && [[ "$file" != *".example" ]]; then
+    echo -e "${RED}❌ terraform.tfvars detectado: $file — não commitar!${NC}"
+    FAIL=1
+  fi
+
+  # Bloqueia .pem / .key
+  if [[ "$file" == *.pem ]] || [[ "$file" == *.key ]]; then
+    echo -e "${RED}❌ Chave privada detectada: $file${NC}"
+    FAIL=1
+  fi
+done
+
+if [ "$FAIL" -eq 1 ]; then
+  echo ""
+  echo -e "${RED}Commit bloqueado. Remova os secrets antes de commitar.${NC}"
+  echo -e "${YELLOW}Dica: git reset HEAD <arquivo> para unstage${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}✅ pre-commit: tudo limpo — commit permitido${NC}"
+exit 0

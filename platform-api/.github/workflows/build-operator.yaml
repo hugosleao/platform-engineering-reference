@@ -1,0 +1,59 @@
+name: Build Platform Operator
+
+# Dispara quando o código da platform-api muda
+# OU pode ser chamado manualmente (workflow_dispatch)
+on:
+  push:
+    branches:
+      - master
+      - develop
+    paths:
+      - "platform-api/**"
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: "AWS Region"
+        default: "us-east-1"
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+
+env:
+  AWS_REGION: ${{ github.event.inputs.aws_region || 'us-east-1' }}
+  IMAGE_NAME: platform-operator
+
+jobs:
+  build-and-push:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-platform
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Criar repositório ECR se não existir
+        run: |
+          aws ecr describe-repositories --repository-names $IMAGE_NAME --region $AWS_REGION 2>/dev/null || \
+          aws ecr create-repository --repository-name $IMAGE_NAME --region $AWS_REGION
+
+      - name: Build e Push
+        uses: docker/build-push-action@v5
+        with:
+          context: platform-api
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

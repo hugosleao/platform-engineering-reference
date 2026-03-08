@@ -1,0 +1,113 @@
+name: CD - Build Image and Deploy
+
+# Roda APENAS nas branches de entrega: develop, release/*, master
+# feature/* e fix/* nunca disparam esse workflow
+on:
+  push:
+    branches:
+      - develop
+      - master
+      - "release/**"
+
+# SERVICE_NAME é substituído pelo Backstage no momento da criação do serviço.
+# Após a substituição, o arquivo gerado terá o nome real (ex: payment-processor).
+env:
+  AWS_REGION: us-east-1
+  SERVICE_NAME: ${{ values.name }}   # substituído pelo Backstage — não é sintaxe GitHub Actions
+
+jobs:
+  build-and-push:
+    name: Build and Push ECR
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      environment: ${{ steps.resolve-env.outputs.name }}
+      account_id: ${{ steps.resolve-env.outputs.account_id }}
+      ecr_repo: ${{ steps.resolve-env.outputs.ecr_repo }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determinar ambiente pela branch
+        id: resolve-env
+        run: |
+          if [[ "$GITHUB_REF" == "refs/heads/develop" ]]; then
+            ENV=dev
+            ACCOUNT="${{ secrets.AWS_ACCOUNT_ID_DEV }}"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            ENV=hml
+            ACCOUNT="${{ secrets.AWS_ACCOUNT_ID_HML }}"
+          elif [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
+            ENV=prd
+            ACCOUNT="${{ secrets.AWS_ACCOUNT_ID_PRD }}"
+          fi
+          echo "name=$ENV"                                                                 >> "$GITHUB_OUTPUT"
+          echo "account_id=$ACCOUNT"                                                       >> "$GITHUB_OUTPUT"
+          echo "ecr_repo=$ACCOUNT.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.SERVICE_NAME }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ steps.resolve-env.outputs.account_id }}:role/github-actions-${{ env.SERVICE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Gerar tag da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.resolve-env.outputs.ecr_repo }}
+          tags: |
+            type=sha,prefix=${{ steps.resolve-env.outputs.name }}-
+            type=raw,value=${{ steps.resolve-env.outputs.name }}-latest
+
+      - name: Build and Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  update-gitops:
+    name: Atualizar GitOps
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Atualizar image-tag no gitops-repo
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITOPS_TOKEN }}
+          script: |
+            const env     = "${{ needs.build-and-push.outputs.environment }}"
+            const tag     = "${{ needs.build-and-push.outputs.image_tag }}"
+            const ecrRepo = "${{ needs.build-and-push.outputs.ecr_repo }}"
+            const service = "${{ env.SERVICE_NAME }}"
+
+            const owner = context.repo.owner
+            const repo  = "gitops-repo"
+            const path  = `clusters/${env}/services/${service}/image-tag.yaml`
+
+            let sha
+            try {
+              const f = await github.rest.repos.getContent({ owner, repo, path })
+              sha = f.data.sha
+            } catch (_) {}
+
+            const content = Buffer.from(
+              `image:\n  tag: "${tag}"\n  repository: "${ecrRepo}"\n`
+            ).toString("base64")
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, sha,
+              message: `chore(${env}): update ${service} to ${tag}`,
+              content,
+            })

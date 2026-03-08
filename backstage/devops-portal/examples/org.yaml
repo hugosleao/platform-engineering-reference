@@ -1,0 +1,34 @@
+---
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-user
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: guest
+spec:
+  memberOf: [guests]
+---
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-group
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: guests
+spec:
+  type: team
+  children: []
+---
+# Time responsável pela API de CEP
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: team-cep
+  description: Time responsável pela API de CEP
+  tags:
+    - api
+    - backend
+spec:
+  type: team
+  profile:
+    displayName: Team CEP
+    email: team-cep@example.com
+  children: []
+  members: []

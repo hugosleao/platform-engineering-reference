@@ -1,0 +1,43 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xrdsinstances.platform.devopstia.com
+spec:
+  group: platform.devopstia.com
+  names:
+    kind: XRDSInstance
+    plural: xrdsinstances
+  claimNames:
+    kind: RDSInstance
+    plural: rdsinstances
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                parameters:
+                  type: object
+                  required: [engine, instanceClass, storageGB]
+                  properties:
+                    engine:
+                      type: string
+                      enum: [postgres, mysql]
+                      default: postgres
+                    engineVersion:
+                      type: string
+                      default: "15.4"
+                    instanceClass:
+                      type: string
+                      default: db.t3.micro
+                    storageGB:
+                      type: integer
+                      default: 20
+                    dbName:
+                      type: string
+                      default: appdb
