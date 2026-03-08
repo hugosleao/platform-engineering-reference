@@ -20,6 +20,17 @@ Developer fills a form in Backstage
 
 ---
 
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Architecture Overview](docs/architecture.md) | Architectural layers, design decisions, infrastructure layout |
+| [Control Plane Design](docs/control-plane.md) | Platform API deep-dive: Operator pattern, CRDs, GitHub App auth |
+| [Developer Workflow](docs/developer-workflow.md) | End-to-end journey from service creation to production deploy |
+| [Platform Components](docs/platform-components.md) | Each component: role, design rationale, integration points |
+
+---
+
 ## Architecture — Golden Triangle + Platform API
 
 ```mermaid
