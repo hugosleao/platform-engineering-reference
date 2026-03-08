@@ -184,14 +184,14 @@ graph LR
     R["release/**"]
     M["master"]
 
-    CI1["ci.yaml ✅\nbuild · test · scan"]
-    CI2["ci.yaml ✅\nbuild · test · scan"]
-    CI3["ci.yaml ✅\nbuild · test · scan"]
-    CI4["ci.yaml ✅\nbuild · test · scan"]
+    CI1["ci.yaml ✅<br/>build · test · scan"]
+    CI2["ci.yaml ✅<br/>build · test · scan"]
+    CI3["ci.yaml ✅<br/>build · test · scan"]
+    CI4["ci.yaml ✅<br/>build · test · scan"]
 
-    CD2["cd.yaml ✅\nECR push → DEV"]
-    CD3["cd.yaml ✅\nECR push → HML"]
-    CD4["cd.yaml ✅\nECR push → PRD"]
+    CD2["cd.yaml ✅<br/>ECR push → DEV"]
+    CD3["cd.yaml ✅<br/>ECR push → HML"]
+    CD4["cd.yaml ✅<br/>ECR push → PRD"]
 
     F --> CI1
     D --> CI2 --> CD2
