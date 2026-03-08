@@ -65,6 +65,12 @@ vendor/
 *.swp
 *.swo
 
+# ── Docs privados — ficam só na máquina ──────────────────────
+STUDY-TRACK.md
+TESTE-PLATAFORMA.md
+insights/
+**/README_LOCAL.md
+
 # ── Misc ──────────────────────────────────────────────────────
 *.bak
 *.tmp
