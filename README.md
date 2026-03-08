@@ -39,16 +39,16 @@ Developer fills a form in Backstage
 
 ```mermaid
 graph TD
-    DEV(["👤 Developer\nopens Backstage · picks template"])
-    BS["🖥️ Backstage\nDeveloper Portal · IDP"]
-    API["⚙️ Platform API\nGo Operator · Reconcile Loop"]
-    GH["📦 GitHub\nrepo · CI/CD · branch protection"]
-    GR["📂 gitops-repo\nArgoCD Apps · Crossplane Claims"]
-    ARGO["🔄 ArgoCD\nGitOps Engine · auto-sync"]
-    POL["🛡️ Kyverno\nPolicy Layer · admission control"]
-    EKS["☸️ EKS Cluster\nWorkloads · Crossplane"]
-    OBS["📊 Observability\nPrometheus · Grafana"]
-    AWS["☁️ AWS Infrastructure\nRDS · S3 · SQS · ECR"]
+    DEV(["👤 Developer<br/>opens Backstage · picks template"])
+    BS["🖥️ Backstage<br/>Developer Portal · IDP"]
+    API["⚙️ Platform API<br/>Go Operator · Reconcile Loop"]
+    GH["📦 GitHub<br/>repo · CI/CD · branch protection"]
+    GR["📂 gitops-repo<br/>ArgoCD Apps · Crossplane Claims"]
+    ARGO["🔄 ArgoCD<br/>GitOps Engine · auto-sync"]
+    POL["🛡️ Kyverno<br/>Policy Layer · admission control"]
+    EKS["☸️ EKS Cluster<br/>Workloads · Crossplane"]
+    OBS["📊 Observability<br/>Prometheus · Grafana"]
+    AWS["☁️ AWS Infrastructure<br/>RDS · S3 · SQS · ECR"]
 
     DEV --> BS
     BS --> API
@@ -115,9 +115,9 @@ Based on the same pattern used internally at **Uber, Cloudflare and HashiCorp**.
 
 ```mermaid
 graph LR
-    O["👁️ Observe\nreads current CRD state"]
-    D["🔍 Diff\ncompares desired vs real"]
-    A["⚡ Act\nwrites Git · updates status"]
+    O["👁️ Observe<br/>reads current CRD state"]
+    D["🔍 Diff<br/>compares desired vs real"]
+    A["⚡ Act<br/>writes Git · updates status"]
 
     O --> D --> A --> |repeats every 30s| O
 
