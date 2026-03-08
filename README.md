@@ -1,61 +1,45 @@
-# vision-2026 — Platform Engineering Lab
+# Platform Engineering Reference Architecture
 
-> Arquitetura de referência para Internal Developer Platform (IDP)  
-> baseada nas práticas de mercado de empresas como **Spotify, Netflix, Mercado Livre e Uber**.
+![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-1.31-326CE5?style=flat&logo=kubernetes)
+![AWS EKS](https://img.shields.io/badge/AWS-EKS-FF9900?style=flat&logo=amazonaws)
+![Terraform](https://img.shields.io/badge/Terraform-1.7-7B42BC?style=flat&logo=terraform)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
 
----
+> **Production-grade Internal Developer Platform (IDP)** built on Kubernetes, following the same architecture principles used by Spotify, Netflix, Mercado Livre and Uber.
 
-## O que é essa arquitetura
-
-É a implementação prática do conceito **"Platform as a Product"** — onde a plataforma
-de engenharia é tratada como um produto interno, e o desenvolvedor é o cliente.
-
-O objetivo é eliminar o atrito entre escrever código e ter esse código rodando em produção,
-com toda a infraestrutura, segurança e observabilidade já resolvidas automaticamente.
+A developer requests a new service → the platform provisions the repository, CI/CD, infrastructure and deployment automatically. No tickets. No AWS console access. No manual configuration.
 
 ```
-Dev escreve código
-  → plataforma provisiona infra, configura CI/CD, faz deploy e monitora
-  → sem tickets, sem espera, sem acesso direto à AWS
+Developer fills a form in Backstage
+  → Platform API (Go Operator) reconciles desired state
+  → GitHub repo + ArgoCD Applications + Crossplane Claims created
+  → ArgoCD deploys to EKS · Crossplane provisions RDS/S3/SQS on AWS
+  → Developer gets a running service in minutes
 ```
 
 ---
 
-## Empresas de referência
-
-| Empresa | IDP | O que inspirou |
-|---|---|---|
-| **Spotify** | Backstage (open source) | Portal self-service, catálogo de serviços |
-| **Netflix** | Spinnaker + plataforma interna | Golden Path, deploy sem downtime |
-| **Mercado Livre** | FURY | Vending machine — dev pede, plataforma entrega |
-| **Uber** | uDeploy | Abstrações sobre Kubernetes, padrão de serviço |
-| **Airbnb** | Deployboard | Scorecard de maturidade de serviços |
-
-Esta arquitetura implementa os mesmos princípios dessas plataformas, mas com
-stack 100% open source e cloud-native.
-
----
-
-## Arquitetura — Golden Triangle + Platform API
+## Architecture — Golden Triangle + Platform API
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    DEVELOPER EXPERIENCE                      │
-│   Dev abre DevPortal → escolhe template → preenche form      │
-│   Plataforma faz o resto automaticamente                     │
+│         Dev opens DevPortal → picks template → fills form    │
+│              Platform handles everything else                │
 └─────────────────────────────────────────────────────────────┘
                              │
             ┌────────────────┼────────────────┐
             ▼                ▼                ▼
      ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
      │  BACKSTAGE  │  │   GITHUB    │  │    ArgoCD   │
-     │    (IDP)    │─▶│  (GitOps)   │─▶│  (Sync)     │
+     │    (IDP)    │─▶│  (GitOps)   │─▶│   (Sync)    │
      └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
             │                │                 │
             ▼                │                 ▼
      ┌─────────────┐         │          ┌─────────────┐
      │ PLATFORM    │─────────┘          │     EKS     │
-     │  API (Go)   │   escreve Git      │ (Workloads) │
+     │  API (Go)   │   writes Git       │ (Workloads) │
      │  Operator   │                    └─────────────┘
      └──────┬──────┘
             │ reconcile loop
@@ -66,380 +50,250 @@ stack 100% open source e cloud-native.
      └─────────────┘
 ```
 
-**Os quatro pilares:**
-- **Backstage** — self-service portal (o dev nunca acessa AWS diretamente)
-- **GitHub** — fonte única de verdade (todo estado fica em Git)
-- **Platform API (Go)** — broker + operator: recebe pedido, escreve manifest no Git, reconcilia estado
-- **ArgoCD** — motor GitOps (o que está no Git é o que está no cluster)
+**Four pillars:**
+- **Backstage** — self-service portal (developer never accesses AWS directly)
+- **GitHub** — single source of truth (all state lives in Git)
+- **Platform API (Go Operator)** — receives request, writes manifest to Git, reconciles state
+- **ArgoCD** — GitOps engine (what is in Git is what runs in the cluster)
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| **IDP** | Backstage | Industry standard, created by Spotify, used by 3000+ companies |
+| **Platform API** | Go + controller-runtime | Operator pattern — continuously reconciles desired vs real state |
+| **GitOps** | ArgoCD | Declarative Git→EKS sync with automatic audit trail |
+| **Cloud IaC** | Crossplane 2.0 | Infrastructure as Kubernetes CRDs — same API for apps and infra |
+| **Base IaC** | Terraform | Provisions EKS, VPC, Route53, cert-manager |
+| **CI/CD** | GitHub Actions + OIDC | Zero static credentials, temporary role via AWS STS |
+| **Auth** | GitHub App (JWT + OAuth) | Single App for catalog, login and Platform API. Zero PAT. |
+| **Guardrails** | Kyverno | Policy as code enforced at admission webhook |
+| **Observability** | Prometheus + Grafana | CNCF standard stack |
+| **DNS + TLS** | Route53 + cert-manager + Let's Encrypt | Automatic TLS, zero manual configuration |
+| **Runtime** | EKS 1.31 + SPOT | Cost-optimized for lab (~$0.30/hr) |
 
 ---
 
 ## Platform API — Go Operator Pattern
 
-Esta é a camada que diferencia o `vision-2026` de uma arquitetura GitOps simples.
-Baseada no padrão que empresas como **Uber, Cloudflare e HashiCorp** usam internamente.
+The layer that differentiates this from a simple GitOps architecture.
+Based on the same pattern used internally at **Uber, Cloudflare and HashiCorp**.
 
-### Por que Operator pattern e não só REST API?
+### Why Operator pattern instead of a plain REST API?
 
-| Abordagem | Limitação |
+| Approach | Limitation |
 |---|---|
-| REST API simples | Stateless — não sabe se o recurso foi criado com sucesso |
-| Broker GitOps puro | Escreve no Git mas não valida o estado final |
-| **Operator (controller-runtime)** | **Reconcilia continuamente — garante que o estado desejado == estado real** |
+| Plain REST API | Stateless — does not know if the resource was actually created |
+| Pure GitOps broker | Writes to Git but does not validate final state |
+| **Operator (controller-runtime)** | **Continuously reconciles — guarantees desired state == real state** |
 
-### O que o Operator faz
-
-```
-Dev cria PlatformService CRD
-  └→ Platform Operator detecta (reconcile loop)
-        ├→ EnsureRepo: cria repo GitHub se não existe
-        ├→ CommitManifest: escreve Crossplane Claim no Git
-        ├→ CommitManifest: escreve 3 ArgoCD Applications no Git
-        │     ├→ {service}-dev  → targetRevision: develop
-        │     ├→ {service}-hml  → targetRevision: release/*
-        │     └→ {service}-prd  → targetRevision: master
-        ├→ Atualiza status do CRD (Provisioning → Ready)
-        └→ Expõe métricas para Prometheus
-```
-
-### GitFlow — Regras de deploy por branch
-
-O template gerado pelo Backstage inclui dois workflows separados:
-
-| Arquivo | Branch | O que faz |
-|---|---|---|
-| `ci.yaml` | **toda branch** | build + test + sonar — nunca deploya |
-| `cd.yaml` | `develop`, `release/**`, `master` | push ECR + atualiza gitops-repo |
-
-```
-feature/* → ci.yaml ✅   cd.yaml ❌  (sem deploy)
-fix/*     → ci.yaml ✅   cd.yaml ❌  (sem deploy)
-develop   → ci.yaml ✅   cd.yaml ✅  → DEV
-release/* → ci.yaml ✅   cd.yaml ✅  → HML
-master    → ci.yaml ✅   cd.yaml ✅  → PRD
-```
-
-### Ciclo de reconciliação (padrão Kubernetes)
+### Reconciliation cycle (Kubernetes pattern)
 
 ```
 ┌──────────────────────────────────────────────┐
 │              RECONCILE LOOP                   │
 │                                               │
-│  Observe (lê estado atual do CRD)             │
+│  Observe  (reads current state of the CRD)   │
 │      │                                        │
 │      ▼                                        │
-│  Diff (compara com estado desejado)           │
+│  Diff     (compares with desired state)       │
 │      │                                        │
 │      ▼                                        │
-│  Act (escreve Git / atualiza status)          │
+│  Act      (writes to Git / updates status)   │
 │      │                                        │
-│      └──────────────── repete a cada 30s ─────┘
+│      └──────────────── repeats every 30s ─────┘
 └──────────────────────────────────────────────┘
 ```
 
-### Quem usa esse padrão no mercado
+### Who uses this pattern in production
 
-| Empresa | Projeto | O que faz |
+| Company | Project | What it does |
 |---|---|---|
-| **HashiCorp** | Vault Operator | Reconcilia Secrets entre Vault e K8s |
-| **Crossplane** | Todos os Providers | Reconcilia Claims → recursos AWS |
-| **Cloudflare** | Operators internos | Gerencia DNS, Workers via CRD |
-| **Uber** | uDeploy internals | Reconcilia estado de deploys |
-| **Livro referência** | Platform Engineering with Go (Nels Lutiy) | Ensina exatamente esse padrão |
+| **HashiCorp** | Vault Operator | Reconciles Secrets between Vault and K8s |
+| **Crossplane** | All Providers | Reconciles Claims → AWS resources |
+| **Cloudflare** | Internal Operators | Manages DNS and Workers via CRD |
+| **Uber** | uDeploy internals | Reconciles deployment state |
 
-### Estrutura da Platform API no projeto
+---
 
-```
-platform-api/
-├── cmd/operator/main.go          ← entry point do operator
-├── internal/
-│   ├── controller/               ← reconcile loop (controller-runtime)
-│   │   ├── platformservice.go    ← CRD PlatformService
-│   │   └── infrarequest.go       ← CRD InfraRequest
-│   ├── github/client.go          ← EnsureRepo + CommitFile (GitHub App JWT)
-│   ├── crossplane/manifest.go    ← gera Crossplane Claims
-│   ├── argocd/manifest.go        ← gera ArgoCD Applications
-│   ├── handlers/                 ← REST endpoints (Backstage → API)
-│   ├── middleware/               ← auth, logging
-│   └── audit/                    ← audit log estruturado
-├── api/v1alpha1/                 ← tipos dos CRDs
-│   ├── platformservice_types.go
-│   └── infrarequest_types.go
-├── config/crd/                   ← manifests gerados dos CRDs
-├── Dockerfile
-└── go.mod
-```
+## GitFlow — Deployment rules per branch
 
-### Fluxo completo com a Platform API
+Every service created by Backstage gets two separate workflows:
+
+| File | Branch | What it does |
+|---|---|---|
+| `ci.yaml` | **every branch** | build + test + quality scan — never deploys |
+| `cd.yaml` | `develop`, `release/**`, `master` | push ECR + updates gitops-repo |
 
 ```
-1. Dev acessa Backstage → preenche template
-2. Backstage chama Platform API REST: POST /api/services
-3. Platform API cria CRD PlatformService no K8s
-4. Operator detecta novo CRD → inicia reconcile
-5. Operator cria repo GitHub (GitHub App JWT)
-6. Operator commita Crossplane Claim no repo
-7. Operator commita ArgoCD Application no gitops-repo
-8. ArgoCD detecta mudança → sync automático
-9. Crossplane reconcilia Claim → provisiona AWS
-10. Operator atualiza status do CRD: Ready
-11. Backstage lê status via API → mostra para o dev
+feature/* → ci.yaml ✅   cd.yaml ❌  (no deploy)
+fix/*     → ci.yaml ✅   cd.yaml ❌  (no deploy)
+develop   → ci.yaml ✅   cd.yaml ✅  → DEV
+release/* → ci.yaml ✅   cd.yaml ✅  → HML
+master    → ci.yaml ✅   cd.yaml ✅  → PRD
 ```
 
 ---
 
-## Stack técnica
+## What you can do with the lab running
 
-| Camada | Tecnologia | Por que usamos |
-|---|---|---|
-| **IDP** | Backstage | Padrão de mercado, criado pelo Spotify, usado por 3000+ empresas |
-| **Platform API** | Go + controller-runtime | Operator pattern — reconcilia estado desejado vs real |
-| **GitOps** | ArgoCD | Sync declarativo Git→EKS, audit trail automático |
-| **IaC Cloud** | Crossplane 2.0 | Infra como CRD Kubernetes — mesma API para app e infra |
-| **IaC Base** | Terraform | Provisiona EKS, VPC, Route53, cert-manager |
-| **CI/CD** | GitHub Actions + OIDC | Zero credencial estática, role temporária via STS |
-| **Auth GitHub** | GitHub App (JWT + OAuth) | Um único App para tudo — catálogo, login e Platform API. Zero PAT. |
-| **Guardrails** | Kyverno | Políticas como código, enforce no admission webhook |
-| **Observabilidade** | Prometheus + Grafana | Stack CNCF padrão de mercado |
-| **DNS + SSL** | Route53 + cert-manager + Let's Encrypt | TLS automático, zero configuração manual |
-| **Container Runtime** | EKS 1.31 + SPOT | Custo otimizado para lab |
-
----
-
-## O que você consegue fazer durante o lab provisionado
-
-### Self-service via DevPortal
-
-Acesse `https://backstage.devopstia.com` e:
-
-- **Criar um novo serviço** — escolhe o template (Java, Python, Node, Lambda),
-  preenche o formulário e o portal cria automaticamente:
-  - Repo no GitHub com código esqueleto
-  - Pipeline CI/CD configurado (GitHub Actions)
-  - Registro no catálogo do Backstage
-  - ArgoCD Application para deploy automático
-
-- **Provisionar infraestrutura AWS** — solicita RDS, S3 ou SQS via Crossplane Claim:
-  - Preenche o formulário → Crossplane provisiona na AWS
-  - Connection string injetada automaticamente no K8s Secret
-  - App sobe e já conecta no banco sem configuração manual
-
-- **Consultar o catálogo** — todos os serviços, seus owners, links de repositório,
-  documentação TechDocs e scorecard de maturidade em um só lugar
-
-- **Ver o Audit Log** — quem criou o quê, quando e por quê
-
-### GitOps com ArgoCD
-
-Acesse `https://argocd.devopstia.com` e:
-
-- Visualize todos os serviços e seu estado (Synced / OutOfSync / Degraded)
-- Veja o histórico de deploys com diff de cada mudança
-- Faça rollback manual de qualquer serviço em segundos
-- Observe os recursos Crossplane (RDS, S3, SQS) aparecerem como recursos
-  Kubernetes junto com pods, ingress e secrets
-
-### CI/CD sem credenciais
-
-Ao fazer um `git push`:
-
-```
-commit → build → test (SonarQube style) → OIDC token
-  → AWS STS → assume-role temporária → push ECR
-  → merge main → ArgoCD detecta → sync → deploy EKS
-```
-
-Zero `AWS_ACCESS_KEY_ID`. Zero `AWS_SECRET_ACCESS_KEY`. Apenas OIDC.
-
-### Guardrails automáticos
-
-Qualquer deploy que não cumpra os padrões é **bloqueado automaticamente**:
-
-| Política | Impacto |
+| Capability | How |
 |---|---|
-| Labels obrigatórios (app/owner/team) | Enforce — deploy rejeitado |
-| Resource limits obrigatórios | Enforce — sem limites, sem deploy |
-| Sem tag `:latest` | Enforce — obriga versionamento |
-| Health probes | Audit — visibilidade de compliance |
-
-### Observabilidade
-
-Acesse `https://grafana.devopstia.com` e:
-
-- Dashboards de todas as aplicações rodando no EKS
-- Métricas da Platform API (requisições, erros, latência)
-- Alertas configurados para pods em crashloop
+| Create a new service (Java or Python) | Backstage template → fills form → repo + CI/CD + ArgoCD created automatically |
+| Provision AWS infrastructure | Request RDS/S3/SQS via Crossplane Claim → connection string auto-injected into K8s Secret |
+| View all services and their state | ArgoCD dashboard → sync status, diff, rollback |
+| Deploy without static AWS credentials | GitHub Actions OIDC → temporary STS role per environment |
+| Enforce platform standards automatically | Kyverno blocks deploy without resource limits, health probes or versioned tags |
+| Monitor platform operations | Grafana dashboard → Platform API metrics + application metrics |
 
 ---
 
-## Como o lab reflete o mercado
+## Guardrails — Automatic enforcement
 
-### O que o MELI (Mercado Livre) faz com o FURY
+Any deploy that does not meet platform standards is **automatically blocked**:
 
-O FURY é o IDP do MELI — funciona exatamente como o que está aqui:
-- Dev acessa portal → escolhe serviço → preenche → plataforma entrega
-- Sem acesso direto à infra
-- Pipeline padronizado para todos os times
-
-**O que temos de equivalente:**
-- Backstage = portal (mesmo princípio do FURY)
-- Platform API = o backend que o FURY chama
-- ArgoCD = o motor de deploy do FURY
-- Templates = os "tipos de serviço" que o FURY oferece
-
-### O que o Spotify faz com o Backstage
-
-O Spotify criou o Backstage e usa internamente com:
-- Catálogo de todos os serviços da empresa
-- TechDocs integrado
-- Scorecard de maturidade
-
-**O que temos de equivalente:**
-- Backstage com catálogo real (via `catalog-info.yaml` nos repos)
-- Plugin Scorecard implementado
-- TechDocs configurado
-
-### O que empresas cloud-native fazem com OIDC
-
-Netflix, Airbnb, Uber — nenhum usa access key estática em CI/CD.
-Todas usam OIDC para autenticação temporária com o cloud provider.
-
-**O que temos de equivalente:**
-- GitHub Actions com OIDC configurado para AWS STS
-- Role temporária com least privilege por ambiente
+| Policy | Enforcement |
+|---|---|
+| Required labels (app / owner / team) | Hard block — deploy rejected |
+| Required resource limits (cpu/memory) | Hard block — no limits, no deploy |
+| No `:latest` image tag | Hard block — versioning enforced |
+| Health probes (liveness + readiness) | Audit — compliance visibility |
 
 ---
 
-## Estrutura do projeto
+## Project Structure
 
 ```
-vision-2026/
-├── setup.sh                  ← detecta AWS/GitHub automaticamente, zero interação com .env.secrets
-├── .env.secrets.example      ← template de credenciais GitHub App (copiar → .env.secrets)
-├── deploy.sh                 ← sobe tudo em um comando
-├── destroy.sh                ← destrói tudo em um comando
-├── terraform.tfvars.example  ← referência (setup.sh gera os tfvars reais)
+platform-engineering-reference/
+├── setup.sh                  ← auto-detects AWS/GitHub, zero interaction with .env.secrets
+├── deploy.sh                 ← brings up everything in one command (with checkpoint/resume)
+├── destroy.sh                ← tears down everything in correct AWS dependency order
+├── .env.secrets.example      ← GitHub App credentials template
 │
-├── infra/                    ← base de infraestrutura (Terraform)
+├── infra/                    ← base infrastructure (Terraform)
 │   ├── 00-backend/           ← S3 state + DynamoDB lock
 │   ├── 01-vpc/               ← VPC + subnets
-│   ├── 02-eks/               ← cluster EKS
+│   ├── 02-eks/               ← EKS cluster
 │   ├── 03-networking/        ← NGINX + cert-manager + Route53
 │   └── 04-platform/          ← ArgoCD + Backstage + Crossplane + PostgreSQL
 │
-├── backstage/                ← DevPortal + templates
+├── backstage/                ← DevPortal + service templates
 │   └── platform-templates/
-│       ├── new-service/      ← template Java (skeleton com ci.yaml + cd.yaml)
-│       └── python-api/       ← template Python
+│       ├── new-service/      ← Java/Spring Boot template (ci.yaml + cd.yaml)
+│       └── python-api/       ← Python FastAPI template
 │
 ├── platform-api/             ← Go Operator (controller-runtime)
-│   ├── cmd/operator/         ← entry point (REST API + Operator no mesmo processo)
+│   ├── cmd/operator/         ← entry point (REST API + Operator in one process)
 │   ├── internal/controller/  ← reconcile loop (PlatformService + InfraRequest)
 │   ├── internal/github/      ← GitHub App client (JWT)
-│   ├── internal/handlers/    ← REST endpoints para Backstage
-│   ├── api/v1alpha1/         ← tipos dos CRDs
-│   ├── config/crd/           ← manifests CRD para aplicar no EKS
-│   ├── k8s/deployment.yaml   ← Deployment + RBAC + Ingress
+│   ├── internal/handlers/    ← REST endpoints for Backstage
+│   ├── api/v1alpha1/         ← CRD types
+│   ├── config/crd/           ← CRD manifests for EKS
 │   └── .github/workflows/
-│       └── build-operator.yaml ← build sem Docker local (GitHub Actions)
+│       └── build-operator.yaml  ← cloud build via GitHub Actions (no local Docker needed)
 │
 ├── crossplane/               ← XRDs + Compositions (RDS, S3, SQS)
-├── guardrails/kyverno/       ← 4 políticas de segurança
-├── gitops/appsets/           ← ApplicationSets ArgoCD (GitFlow: dev/hml/prd)
+├── guardrails/kyverno/       ← 4 security policies
+├── gitops/appsets/           ← ArgoCD ApplicationSets (GitFlow: dev/hml/prd)
 ├── observability/            ← Prometheus + Grafana
-├── scripts/
-│   ├── get-credentials.sh    ← recupera todas as senhas pós-deploy
-│   ├── deploy-operator.sh    ← deploy manual do operator se necessário
-│   └── setup-secrets.sh      ← utilitário auxiliar
-└── insights/                 ← DDPE e tendências 2026
+└── scripts/
+    ├── get-credentials.sh    ← retrieves all passwords and URLs after deploy
+    └── deploy-operator.sh    ← manual operator deploy if needed
 ```
 
 ---
 
-## Para subir
+## Getting Started
 
-> **Docker não é necessário** — o Platform Operator é buildado via GitHub Actions na nuvem.
+> **Docker is not required** — the Platform Operator is built via GitHub Actions in the cloud.
 
-### Pré-requisitos (1x)
+### Prerequisites
 
 ```bash
-# AWS já autenticado (confirma)
+# Confirm AWS authentication
 aws sts get-caller-identity
 
-# gh CLI autenticado
+# Authenticate GitHub CLI
 gh auth login
 ```
 
-### Setup zero-interação (recomendado)
+### Setup (zero interaction)
 
 ```bash
-# Preenche uma vez só com as credenciais do GitHub App
+# Fill in GitHub App credentials once
 cp .env.secrets.example .env.secrets
 chmod 600 .env.secrets
 vim .env.secrets   # GITHUB_APP_ID, INSTALLATION_ID, CLIENT_ID, CLIENT_SECRET, PEM_PATH
 
-# Detecta tudo o que for possível automaticamente
+# Auto-detects everything possible
 ./setup.sh
-# → S3 tfstate, DynamoDB lock, Route53, GitHub Org: auto-detectados
-# → Repos gitops-repo e platform-templates: criados automaticamente
-# → terraform.tfvars dos 4 módulos: gerados
-# → AWS Secrets Manager: populado
+# → S3 tfstate, DynamoDB lock, Route53, GitHub Org: auto-detected
+# → gitops-repo and platform-templates repos: created automatically
+# → terraform.tfvars for all 4 modules: generated
+# → AWS Secrets Manager: populated
 
-# Sobe tudo em ordem
+# Bring up everything
 ./deploy.sh
 ```
 
-Ao finalizar, exibe todas as credenciais. Para recuperar depois:
+After deploy completes, all credentials (ArgoCD, Grafana, Platform API token, PostgreSQL) are displayed automatically.
 
 ```bash
+# Retrieve credentials at any time
 ./scripts/get-credentials.sh
 ```
 
-Tempo estimado: **~25–30 minutos** (EKS domina com ~15 min)  
-Custo estimado: **~$0.30/hora** (EKS SPOT t3.medium)
+**Estimated time:** ~25–30 minutes (EKS takes ~15 min)
+**Estimated cost:** ~$0.30/hour (EKS SPOT t3.medium)
 
----
-
-## Para destruir (sem deixar nada na AWS)
+### Teardown — leaves nothing in AWS
 
 ```bash
 ./destroy.sh
-# Digite DESTROY para confirmar
+# Type DESTROY to confirm
 ```
 
-O script destrói na ordem correta: Crossplane Claims → ArgoCD Apps →
-Platform → Networking → EKS → VPC. Nada fica órfão.
+Destroys in correct order: Crossplane Claims → ArgoCD Apps → Platform → Networking → EKS → VPC. Nothing is left orphaned.
 
 ---
 
-## Roadmap de implementação
+## Roadmap
 
-| Fase | Componente | Status |
+| Phase | Component | Status |
 |---|---|---|
-| 1 | Infra base (Terraform: VPC, EKS, NGINX, cert-manager) | ✅ implementado |
-| 1 | Backstage + templates (ci.yaml / cd.yaml GitFlow) | ✅ implementado |
-| 1 | Crossplane XRDs + Compositions (RDS, S3, SQS) | ✅ implementado |
-| 1 | ArgoCD ApplicationSets (dev/hml/prd) | ✅ implementado |
-| 1 | Kyverno guardrails (4 políticas) | ✅ implementado |
-| 1 | Observabilidade (Prometheus + Grafana) | ✅ implementado |
-| 2 | Platform API — Go Operator (controller-runtime) | ✅ implementado |
-| 2 | CRDs: PlatformService + InfraRequest | ✅ implementado |
-| 2 | GitFlow (ci.yaml / cd.yaml separados) | ✅ implementado |
-| 2 | setup.sh + get-credentials.sh automatizados | ✅ implementado |
-| 2 | Build sem Docker local (GitHub Actions) | ✅ implementado |
-| 3 | AI layer (linguagem natural → Claim) | 🔲 futuro |
-| 3 | Scorecard de maturidade avançado | 🔲 futuro |
+| 1 | Base infra (Terraform: VPC, EKS, NGINX, cert-manager) | ✅ done |
+| 1 | Backstage + templates (GitFlow ci.yaml / cd.yaml) | ✅ done |
+| 1 | Crossplane XRDs + Compositions (RDS, S3, SQS) | ✅ done |
+| 1 | ArgoCD ApplicationSets (dev / hml / prd) | ✅ done |
+| 1 | Kyverno guardrails (4 policies) | ✅ done |
+| 1 | Observability (Prometheus + Grafana) | ✅ done |
+| 2 | Platform API — Go Operator (controller-runtime) | ✅ done |
+| 2 | CRDs: PlatformService + InfraRequest | ✅ done |
+| 2 | GitFlow (separate ci.yaml / cd.yaml) | ✅ done |
+| 2 | Automated setup + credentials scripts | ✅ done |
+| 2 | Cloud build without local Docker | ✅ done |
+| 3 | AI layer (natural language → Claim) | 🔲 planned |
+| 3 | Advanced service maturity scorecard | 🔲 planned |
 
 ---
 
-## Referências
+## References
 
-- [Backstage.io](https://backstage.io) — documentação oficial
-- [Crossplane 2.0](https://docs.crossplane.io) — IaC declarativa
+- [Backstage.io](https://backstage.io) — official documentation
+- [Crossplane](https://docs.crossplane.io) — declarative cloud infrastructure
 - [ArgoCD](https://argo-cd.readthedocs.io) — GitOps engine
-- [Kyverno](https://kyverno.io) — policy engine para Kubernetes
-- [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) — base do Operator pattern em Go
-- [CNCF Landscape](https://landscape.cncf.io) — mapa do ecossistema cloud-native
-- [Crossplane & AI: API-First Infrastructure](https://blog.crossplane.io/crossplane-ai-the-case-for-api-first-infrastructure/) — visão 2026
-- **Platform Engineering with Go** — Nels Lutiy (O'Reilly) — Operator pattern, CRDs, platform tooling
-- **Crafting Engineering Strategy** — Will Larson (O'Reilly) — estratégia de plataforma
+- [Kyverno](https://kyverno.io) — Kubernetes policy engine
+- [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) — Go Operator foundation
+- [CNCF Landscape](https://landscape.cncf.io) — cloud-native ecosystem map
+- [Crossplane & AI: API-First Infrastructure](https://blog.crossplane.io/crossplane-ai-the-case-for-api-first-infrastructure/)
+- **Platform Engineering on Kubernetes** — Mauricio Salatino (Manning)
+- **Kubernetes Patterns** — Bilgin Ibryam & Roland Huß (O'Reilly)
+- **Platform Engineering with Go** — Nels Lutiy (O'Reilly)
+
+---
+
+## License
+
+MIT © 2026 — see [LICENSE](LICENSE)
