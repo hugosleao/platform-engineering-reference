@@ -22,32 +22,39 @@ Developer fills a form in Backstage
 
 ## Architecture — Golden Triangle + Platform API
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    DEVELOPER EXPERIENCE                      │
-│         Dev opens DevPortal → picks template → fills form    │
-│              Platform handles everything else                │
-└─────────────────────────────────────────────────────────────┘
-                             │
-            ┌────────────────┼────────────────┐
-            ▼                ▼                ▼
-     ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-     │  BACKSTAGE  │  │   GITHUB    │  │    ArgoCD   │
-     │    (IDP)    │─▶│  (GitOps)   │─▶│   (Sync)    │
-     └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-            │                │                 │
-            ▼                │                 ▼
-     ┌─────────────┐         │          ┌─────────────┐
-     │ PLATFORM    │─────────┘          │     EKS     │
-     │  API (Go)   │   writes Git       │ (Workloads) │
-     │  Operator   │                    └─────────────┘
-     └──────┬──────┘
-            │ reconcile loop
-            ▼
-     ┌─────────────┐
-     │  CROSSPLANE │──▶ AWS: RDS · SQS · S3
-     │  (XRDs)     │
-     └─────────────┘
+```mermaid
+graph TD
+    DEV(["👤 Developer\nopens Backstage · picks template"])
+    BS["🖥️ Backstage\nDeveloper Portal · IDP"]
+    API["⚙️ Platform API\nGo Operator · Reconcile Loop"]
+    GH["📦 GitHub\nrepo · CI/CD · branch protection"]
+    GR["📂 gitops-repo\nArgoCD Apps · Crossplane Claims"]
+    ARGO["🔄 ArgoCD\nGitOps Engine · auto-sync"]
+    POL["🛡️ Kyverno\nPolicy Layer · admission control"]
+    EKS["☸️ EKS Cluster\nWorkloads · Crossplane"]
+    OBS["📊 Observability\nPrometheus · Grafana"]
+    AWS["☁️ AWS Infrastructure\nRDS · S3 · SQS · ECR"]
+
+    DEV --> BS
+    BS --> API
+    API -->|writes Git| GH
+    API -->|writes Git| GR
+    GR --> ARGO
+    ARGO --> POL
+    POL --> EKS
+    EKS --> AWS
+    EKS --> OBS
+
+    style DEV fill:#1f2937,stroke:#00ADD8,color:#fff
+    style BS  fill:#1f2937,stroke:#9BF0E1,color:#fff
+    style API fill:#1f2937,stroke:#00ADD8,color:#fff
+    style GH  fill:#1f2937,stroke:#6e7681,color:#fff
+    style GR  fill:#1f2937,stroke:#6e7681,color:#fff
+    style ARGO fill:#1f2937,stroke:#EF7B4D,color:#fff
+    style POL fill:#1f2937,stroke:#c084fc,color:#fff
+    style EKS fill:#1f2937,stroke:#326CE5,color:#fff
+    style OBS fill:#1f2937,stroke:#F46800,color:#fff
+    style AWS fill:#1f2937,stroke:#FF9900,color:#fff
 ```
 
 **Four pillars:**
@@ -91,20 +98,17 @@ Based on the same pattern used internally at **Uber, Cloudflare and HashiCorp**.
 
 ### Reconciliation cycle (Kubernetes pattern)
 
-```
-┌──────────────────────────────────────────────┐
-│              RECONCILE LOOP                   │
-│                                               │
-│  Observe  (reads current state of the CRD)   │
-│      │                                        │
-│      ▼                                        │
-│  Diff     (compares with desired state)       │
-│      │                                        │
-│      ▼                                        │
-│  Act      (writes to Git / updates status)   │
-│      │                                        │
-│      └──────────────── repeats every 30s ─────┘
-└──────────────────────────────────────────────┘
+```mermaid
+graph LR
+    O["👁️ Observe\nreads current CRD state"]
+    D["🔍 Diff\ncompares desired vs real"]
+    A["⚡ Act\nwrites Git · updates status"]
+
+    O --> D --> A --> |repeats every 30s| O
+
+    style O fill:#1f2937,stroke:#00ADD8,color:#fff
+    style D fill:#1f2937,stroke:#c084fc,color:#fff
+    style A fill:#1f2937,stroke:#EF7B4D,color:#fff
 ```
 
 ### Who uses this pattern in production
@@ -127,12 +131,38 @@ Every service created by Backstage gets two separate workflows:
 | `ci.yaml` | **every branch** | build + test + quality scan — never deploys |
 | `cd.yaml` | `develop`, `release/**`, `master` | push ECR + updates gitops-repo |
 
-```
-feature/* → ci.yaml ✅   cd.yaml ❌  (no deploy)
-fix/*     → ci.yaml ✅   cd.yaml ❌  (no deploy)
-develop   → ci.yaml ✅   cd.yaml ✅  → DEV
-release/* → ci.yaml ✅   cd.yaml ✅  → HML
-master    → ci.yaml ✅   cd.yaml ✅  → PRD
+```mermaid
+graph LR
+    F["feature/* · fix/*"]
+    D["develop"]
+    R["release/**"]
+    M["master"]
+
+    CI1["ci.yaml ✅\nbuild · test · scan"]
+    CI2["ci.yaml ✅\nbuild · test · scan"]
+    CI3["ci.yaml ✅\nbuild · test · scan"]
+    CI4["ci.yaml ✅\nbuild · test · scan"]
+
+    CD2["cd.yaml ✅\nECR push → DEV"]
+    CD3["cd.yaml ✅\nECR push → HML"]
+    CD4["cd.yaml ✅\nECR push → PRD"]
+
+    F --> CI1
+    D --> CI2 --> CD2
+    R --> CI3 --> CD3
+    M --> CI4 --> CD4
+
+    style F fill:#1f2937,stroke:#6e7681,color:#fff
+    style D fill:#1f2937,stroke:#00ADD8,color:#fff
+    style R fill:#1f2937,stroke:#c084fc,color:#fff
+    style M fill:#1f2937,stroke:#22c55e,color:#fff
+    style CI1 fill:#1f2937,stroke:#6e7681,color:#fff
+    style CI2 fill:#1f2937,stroke:#6e7681,color:#fff
+    style CI3 fill:#1f2937,stroke:#6e7681,color:#fff
+    style CI4 fill:#1f2937,stroke:#6e7681,color:#fff
+    style CD2 fill:#1f2937,stroke:#00ADD8,color:#fff
+    style CD3 fill:#1f2937,stroke:#c084fc,color:#fff
+    style CD4 fill:#1f2937,stroke:#22c55e,color:#fff
 ```
 
 ---
